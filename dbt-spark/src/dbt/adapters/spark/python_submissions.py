@@ -293,3 +293,51 @@ class AllPurposeClusterPythonJobHelper(BaseDatabricksHelper):
                     )
             finally:
                 context.destroy(context_id)
+
+
+class LivyPythonJobHelper(PythonJobHelper):
+    """Python job helper for Livy endpoints (EMR Serverless)."""
+    
+    def __init__(self, parsed_model: Dict, credentials) -> None:
+        self.credentials = credentials
+        self.identifier = parsed_model["alias"]
+        self.schema = parsed_model["schema"]
+        self.parsed_model = parsed_model
+        self.timeout = self.get_timeout()
+        # Import here to avoid circular imports
+        from dbt.adapters.spark.livy import LivyConnectionWrapper
+        
+        # Initialize Livy connection wrapper with correct parameters  
+        livy_url = f"https://{credentials.host}"
+        self.livy_wrapper = LivyConnectionWrapper(
+            livy_url=livy_url,
+            execution_role_arn=credentials.execution_role_arn,
+            region=credentials.region,
+            profile_name=credentials.profile
+        )
+
+    def get_timeout(self) -> int:
+        timeout = self.parsed_model["config"].get("timeout", DEFAULT_TIMEOUT)
+        if timeout <= 0:
+            raise ValueError("Timeout must be a positive integer")
+        return timeout
+
+    def check_credentials(self) -> None:
+        # Livy doesn't require cluster_id, just check basic requirements
+        if not hasattr(self.credentials, 'host') or not self.credentials.host:
+            raise ValueError("Livy host is required for livy submission method")
+
+    def submit(self, compiled_code: str) -> None:
+        """Execute Python code using Livy session."""
+        try:
+            # Get cursor from the Livy wrapper
+            cursor = self.livy_wrapper.cursor()
+            
+            # Execute the compiled Python code
+            cursor.execute(compiled_code)
+            
+            # Wait for completion and handle results
+            # The cursor.execute method should handle polling internally
+            
+        except Exception as e:
+            raise DbtRuntimeError(f"Python model failed with error: {str(e)}")

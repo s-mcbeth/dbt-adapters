@@ -488,13 +488,19 @@ class SparkAdapter(SQLAdapter):
 
     @property
     def default_python_submission_method(self) -> str:
+        # Use livy submission for livy connections
+        connection = self.connections.get_thread_connection()
+        if connection.credentials.method == "livy":
+            return "livy"
         return "all_purpose_cluster"
 
     @property
     def python_submission_helpers(self) -> Dict[str, Type[PythonJobHelper]]:
+        from dbt.adapters.spark.python_submissions import LivyPythonJobHelper
         return {
             "job_cluster": JobClusterPythonJobHelper,
             "all_purpose_cluster": AllPurposeClusterPythonJobHelper,
+            "livy": LivyPythonJobHelper,
         }
 
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:

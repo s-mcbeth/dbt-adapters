@@ -85,6 +85,9 @@ class SparkCredentials(Credentials):
     use_ssl: bool = False
     server_side_parameters: Dict[str, str] = field(default_factory=dict)
     retry_all: bool = False
+    execution_role_arn: Optional[str] = None
+    region: Optional[str] = None
+    profile: Optional[str] = None
 
     @classmethod
     def __pre_deserialize__(cls, data: Any) -> Any:
@@ -534,43 +537,23 @@ class SparkConnectionManager(SQLConnectionManager):
                     conn = pyodbc.connect(connection_str, autocommit=True)
                     handle = PyodbcConnectionWrapper(conn)
                 elif creds.method == SparkConnectionMethod.LIVY:
-                    cls.validate_creds(creds, ["host", "port", "schema"])
-                    
-                    # Livy connection logic
-                    import requests
-                    import json
-                    
-                    # Build Livy session URL
-                    livy_url = f"http://{creds.host}:{creds.port}/sessions"
-                    
-                    # Create Livy session
-                    session_data = {
-                        "kind": "sql",
-                        "conf": creds.server_side_parameters
-                    }
-                    
-                    if creds.user:
-                        session_data["proxyUser"] = creds.user
-                    
-                    response = requests.post(
-                        livy_url,
-                        json=session_data,
-                        headers={"Content-Type": "application/json"}
-                    )
-                    
-                    if response.status_code != 200:
-                        raise FailedToConnectError(f"Failed to create Livy session: {response.text}")
-                    
-                    session_info = response.json()
-                    session_id = session_info["id"]
-                    
-                    # Import Livy connection wrapper
+                    cls.validate_creds(creds, ["host", "port", "schema", "execution_role_arn", "region"])
                     from .livy import LivyConnectionWrapper
                     
+                    # Prepend https:// if it is missing
+                    host = creds.host
+                    if not host.startswith("https://"):
+                        host = "https://" + creds.host
+                    
+                    livy_url = host
+                    if creds.port:
+                        livy_url = f"{livy_url}:{creds.port}"
+
                     handle = LivyConnectionWrapper(
-                        session_id=session_id,
-                        livy_url=f"http://{creds.host}:{creds.port}",
-                        server_side_parameters=creds.server_side_parameters
+                        livy_url=livy_url,
+                        execution_role_arn=creds.execution_role_arn,
+                        region=creds.region,
+                        profile_name=creds.profile
                     )
                 elif creds.method == SparkConnectionMethod.SESSION:
                     from .session import (  # noqa: F401
@@ -586,6 +569,8 @@ class SparkConnectionManager(SQLConnectionManager):
                 break
             except Exception as e:
                 exc = e
+                # Debug: Print actual exception for Livy connections
+                logger.debug(f"Connection exception: {type(e).__name__}: {str(e)}")
                 if isinstance(e, EOFError):
                     # The user almost certainly has invalid credentials.
                     # Perhaps a token expired, or something
