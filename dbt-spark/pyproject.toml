@@ -28,6 +28,11 @@ dependencies = [
     # add dbt-core to ensure backwards compatibility of installation, this is not a functional dependency
     "dbt-core>=1.8.0",
     "sqlparams>=3.0.0",
+    "requests>=2.25.0",
+    "botocore>=1.34.0",
+    "awscrt>=0.20.0",
+    "numpy>=2.0.0",
+    "pyspark>=4.0.0",
 ]
 [project.optional-dependencies]
 ODBC = ["pyodbc>=5.1,<5.3"]
@@ -36,11 +41,15 @@ PyHive = [
     "thrift>=0.11.0,<0.17.0",
 ]
 session = ["pyspark>=3.0.0,<4.0.0"]
+livy = ["requests>=2.25.0", "botocore>=1.34.0", "awscrt>=0.20.0"]
 all = [
     "pyodbc>=5.1,<5.3",
     "PyHive[hive_pure_sasl]~=0.7.0",
     "thrift>=0.11.0,<0.17.0",
     "pyspark>=3.0.0,<4.0.0",
+    "requests>=2.25.0",
+    "botocore>=1.34.0",
+    "awscrt>=0.20.0",
 ]
 
 [project.urls]

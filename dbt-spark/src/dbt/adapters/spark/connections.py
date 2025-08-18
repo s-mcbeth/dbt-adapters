@@ -60,6 +60,7 @@ class SparkConnectionMethod(StrEnum):
     HTTP = "http"
     ODBC = "odbc"
     SESSION = "session"
+    LIVY = "livy"
 
 
 @dataclass
@@ -84,6 +85,12 @@ class SparkCredentials(Credentials):
     use_ssl: bool = False
     server_side_parameters: Dict[str, str] = field(default_factory=dict)
     retry_all: bool = False
+    execution_role_arn: Optional[str] = None
+    region: Optional[str] = None
+    profile: Optional[str] = None
+    spark_conf: Dict[str, str] = field(default_factory=dict)
+    job_parameters: Dict[str, str] = field(default_factory=dict)
+    warehouse_base_s3: Optional[str] = None
 
     @classmethod
     def __pre_deserialize__(cls, data: Any) -> Any:
@@ -532,6 +539,49 @@ class SparkConnectionManager(SQLConnectionManager):
 
                     conn = pyodbc.connect(connection_str, autocommit=True)
                     handle = PyodbcConnectionWrapper(conn)
+                elif creds.method == SparkConnectionMethod.LIVY:
+                    cls.validate_creds(creds, ["host", "schema", "execution_role_arn", "region"])
+                    from .livy import LivyConnectionWrapper, LivySessionPool
+                    
+                    # Prepend https:// if it is missing
+                    host = creds.host
+                    if not host.startswith("https://"):
+                        host = "https://" + creds.host
+                    
+                    livy_url = host
+                    if creds.port:
+                        livy_url = f"{livy_url}:{creds.port}"
+
+                    # Use session pool for better performance
+                    session_pool = LivySessionPool()
+                    
+                    # Get Spark configuration from credentials
+                    spark_conf = getattr(creds, 'spark_conf', {})
+                    job_parameters = getattr(creds, 'job_parameters', {})
+                    
+                    # Warm up sessions on first connection
+                    if not hasattr(session_pool, '_warmed_up'):
+                        session_pool.warm_up_sessions(
+                            livy_url=livy_url,
+                            execution_role_arn=creds.execution_role_arn,
+                            region=creds.region,
+                            profile_name=creds.profile,
+                            spark_conf=spark_conf,
+                            job_parameters=job_parameters,
+                            sql_sessions=1,  # Pre-create 1 SQL session (reduced)
+                            pyspark_sessions=1  # Pre-create 1 PySpark session
+                        )
+                        session_pool._warmed_up = True
+
+                    handle = session_pool.get_session(
+                        livy_url=livy_url,
+                        execution_role_arn=creds.execution_role_arn,
+                        region=creds.region,
+                        profile_name=creds.profile,
+                        session_kind="sql",  # Default to SQL for regular connections
+                        spark_conf=spark_conf,
+                        job_parameters=job_parameters
+                    )
                 elif creds.method == SparkConnectionMethod.SESSION:
                     from .session import (  # noqa: F401
                         Connection,
@@ -546,6 +596,8 @@ class SparkConnectionManager(SQLConnectionManager):
                 break
             except Exception as e:
                 exc = e
+                # Debug: Print actual exception for Livy connections
+                logger.debug(f"Connection exception: {type(e).__name__}: {str(e)}")
                 if isinstance(e, EOFError):
                     # The user almost certainly has invalid credentials.
                     # Perhaps a token expired, or something
