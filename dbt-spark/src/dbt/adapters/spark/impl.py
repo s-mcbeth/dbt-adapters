@@ -503,6 +503,11 @@ class SparkAdapter(SQLAdapter):
             "livy": LivyPythonJobHelper,
         }
 
+    def get_warehouse_path(self) -> Optional[str]:
+        """Get the warehouse base path from credentials."""
+        connection = self.connections.get_thread_connection()
+        return getattr(connection.credentials, 'warehouse_base_s3', None)
+
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:
         grants_dict: Dict[str, List[str]] = {}
         for row in grants_table:

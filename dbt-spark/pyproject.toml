@@ -31,6 +31,8 @@ dependencies = [
     "requests>=2.25.0",
     "botocore>=1.34.0",
     "awscrt>=0.20.0",
+    "numpy>=2.0.0",
+    "pyspark>=4.0.0",
 ]
 [project.optional-dependencies]
 ODBC = ["pyodbc>=5.1,<5.3"]

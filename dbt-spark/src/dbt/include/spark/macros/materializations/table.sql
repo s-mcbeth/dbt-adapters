@@ -56,6 +56,20 @@ df = model(dbt, spark)
 
 # make sure pyspark exists in the namepace, for 7.3.x-scala2.12 it does not exist
 import pyspark
+# Patch NumPy 2.0 compatibility before importing pandas/koalas
+try:
+  import numpy as np
+  if hasattr(np, 'NaN'):
+    pass  # NumPy 1.x - no action needed
+  else:
+    # NumPy 2.0 - add backward compatibility
+    np.NaN = np.nan
+    np.NAN = np.nan  
+    np.NINF = np.NINF if hasattr(np, 'NINF') else -np.inf
+    np.PINF = np.PINF if hasattr(np, 'PINF') else np.inf
+except ImportError:
+  pass  # NumPy not available
+
 # make sure pandas exists before using it
 try:
   import pandas
@@ -98,7 +112,7 @@ else:
   msg = f"{type(df)} is not a supported type for dbt Python materialization"
   raise Exception(msg)
 
-df.write.mode("overwrite").format("{{ config.get('file_format', 'delta') }}").option("overwriteSchema", "true").saveAsTable("{{ target_relation }}")
+df.write.mode("overwrite").format("delta").option("overwriteSchema", "true").saveAsTable("{{ target_relation }}")
 {%- endmacro -%}
 
 {%macro py_script_comment()%}
