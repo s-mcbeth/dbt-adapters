@@ -39,6 +39,7 @@ from dbt.adapters.spark import SparkColumn
 from dbt.adapters.spark.python_submissions import (
     JobClusterPythonJobHelper,
     AllPurposeClusterPythonJobHelper,
+    SessionPythonJobHelper,
 )
 from dbt.adapters.base import BaseRelation
 from dbt.adapters.contracts.relation import RelationType, RelationConfig
@@ -257,7 +258,12 @@ class SparkAdapter(SQLAdapter):
             ):
                 return []
             # Iceberg compute engine behavior: show table
-            elif "SHOW TABLE EXTENDED is not supported for v2 tables" in errmsg:
+            elif (
+                "SHOW TABLE EXTENDED is not supported for v2 tables" in errmsg
+                # EMR Serverless / Glue: tables with empty StorageDescriptor.Location cause
+                # Hadoop to throw IllegalArgumentException before any rows are returned
+                or "Can not create a Path from an empty string" in errmsg
+            ):
                 # this happens with spark-iceberg with v2 iceberg tables
                 # https://issues.apache.org/jira/browse/SPARK-33393
                 show_table_rows = self.execute_macro(
@@ -500,6 +506,10 @@ class SparkAdapter(SQLAdapter):
 
     @property
     def default_python_submission_method(self) -> str:
+        from dbt.adapters.spark.connections import SparkConnectionMethod
+
+        if self.connections.profile.credentials.method == SparkConnectionMethod.SESSION:
+            return "session"
         return "all_purpose_cluster"
 
     @property
@@ -507,6 +517,7 @@ class SparkAdapter(SQLAdapter):
         return {
             "job_cluster": JobClusterPythonJobHelper,
             "all_purpose_cluster": AllPurposeClusterPythonJobHelper,
+            "session": SessionPythonJobHelper,
         }
 
     def standardize_grants_dict(self, grants_table: "agate.Table") -> dict:

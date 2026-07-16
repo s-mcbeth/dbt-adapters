@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import datetime as dt
+import os
 from types import TracebackType
 from typing import Any, Dict, List, Optional, Tuple, Union, Sequence
 
@@ -113,7 +114,13 @@ class Cursor:
         if len(parameters) > 0:
             sql = sql % parameters
 
-        builder = SparkSession.builder.enableHiveSupport()
+        # Spark Connect sessions (SPARK_REMOTE) use a remote server where
+        # catalogImplementation is already set as a static config; calling
+        # enableHiveSupport() on the client side raises "Cannot modify static config".
+        if os.environ.get("SPARK_REMOTE"):
+            builder = SparkSession.builder
+        else:
+            builder = SparkSession.builder.enableHiveSupport()
 
         for parameter, value in self.server_side_parameters.items():
             builder = builder.config(parameter, value)

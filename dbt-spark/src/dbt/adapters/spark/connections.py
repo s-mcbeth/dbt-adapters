@@ -123,7 +123,7 @@ class SparkCredentials(Credentials):
     def __post_init__(self) -> None:
         if self.method is None:
             raise DbtRuntimeError("Must specify `method` in profile")
-        if self.host is None:
+        if self.host is None and self.method != SparkConnectionMethod.SESSION:
             raise DbtRuntimeError("Must specify `host` in profile")
         if self.schema is None:
             raise DbtRuntimeError("Must specify `schema` in profile")
@@ -199,7 +199,7 @@ class SparkCredentials(Credentials):
         return self.host  # type: ignore
 
     def _connection_keys(self) -> Tuple[str, ...]:
-        return "host", "port", "cluster", "endpoint", "schema", "organization"
+        return "method", "host", "port", "cluster", "endpoint", "schema", "organization"
 
 
 class SparkConnectionWrapper(ABC):
