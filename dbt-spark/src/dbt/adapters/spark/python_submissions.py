@@ -293,3 +293,21 @@ class AllPurposeClusterPythonJobHelper(BaseDatabricksHelper):
                     )
             finally:
                 context.destroy(context_id)
+
+
+class SessionPythonJobHelper(PythonJobHelper):
+    """Execute Python models in-process via the existing SparkSession.
+
+    Used when method=session (Spark Connect or local PySpark). The compiled
+    model code references `spark` as a free variable — we inject the active
+    session via exec's global namespace.
+    """
+
+    def __init__(self, parsed_model: Dict, credentials: SparkCredentials) -> None:
+        pass
+
+    def submit(self, compiled_code: str) -> None:
+        from pyspark.sql import SparkSession
+
+        spark = SparkSession.builder.getOrCreate()
+        exec(compiled_code, {"spark": spark})
